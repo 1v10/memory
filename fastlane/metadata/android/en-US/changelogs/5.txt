@@ -1,0 +1,3 @@
+Refresh once on launch, then pull down at the top of the list to update.
+Remove the automatic refresh timer and header controls.
+Keep the current snapshot when returning from the background.

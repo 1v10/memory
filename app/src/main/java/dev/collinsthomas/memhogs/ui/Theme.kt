@@ -4,15 +4,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 
 object Palette {
-    val Background = Color(0xFF0B0E11)
-    val Surface = Color(0xFF12161B)
-    val Cell = Color(0xFF1A212A)
-    val Amber = Color(0xFFFFB454)
-    val Cyan = Color(0xFF56C9DB)
-    val Green = Color(0xFF7EC699)
-    val Red = Color(0xFFFF5555)
-    val Dim = Color(0xFF6B7280)
-    val Text = Color(0xFFD7DEE8)
+    val Background = Color(0xFFF7F9FC)
+    val Surface = Color(0xFFFFFFFF)
+    val Cell = Color(0xFFE1E7EF)
+    val Border = Color(0xFFCAD4E0)
+    val Accent = Color(0xFF245FC0)
+    val AccentTint = Color(0xFFEDF3FF)
+    val Cyan = Color(0xFF00667A)
+    val Green = Color(0xFF216645)
+    val Red = Color(0xFFB42318)
+    val RedTint = Color(0xFFFFEBE8)
+    val Dim = Color(0xFF526174)
+    val Text = Color(0xFF182230)
 }
 
 val Mono = FontFamily.Monospace

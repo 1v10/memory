@@ -30,10 +30,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -47,9 +52,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,7 +66,9 @@ import dev.collinsthomas.memhogs.R
 @Composable
 internal fun GroupList(
     snapshot: UiSnapshot,
+    refreshing: Boolean,
     motion: Boolean,
+    onRefresh: () -> Unit,
     onReclaim: (Set<String>) -> Unit,
     onForceStop: (Set<String>) -> Unit,
 ) {
@@ -74,28 +84,72 @@ internal fun GroupList(
 
     BackHandler(enabled = selecting) { selected = emptySet() }
 
+    val pullState = rememberPullToRefreshState()
+    val refreshLabel = stringResource(R.string.refresh)
     Column(Modifier.fillMaxSize()) {
         FilterPrompt(filter, onChange = { filter = it })
-        if (shown.isEmpty()) {
-            NoMatch(filter, Modifier.weight(1f))
-        } else {
-            LazyColumn(Modifier.weight(1f), state = rememberListStateKeptAtTop(shown)) {
-                items(shown, key = { it.key }) { group ->
-                    Box(Modifier.animateItem()) {
-                        GroupRow(
-                            group = group,
-                            barFraction = (group.shareOfRam / largestShare).toFloat(),
-                            motion = motion,
-                            expanded = group.key in expanded,
-                            selection = selectionOf(group, selecting, group.key in selected),
-                            onToggleExpanded = { expanded = expanded.toggle(group.key) },
-                            onToggleSelected = { selected = selected.toggle(group.key) },
-                            onReclaim = { onReclaim(setOf(group.key)) },
-                            onForceStop = { confirmingForceStop = setOf(group.key) },
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = onRefresh,
+            state = pullState,
+            modifier = Modifier.weight(1f).semantics {
+                customActions = if (refreshing) {
+                    emptyList()
+                } else {
+                    listOf(
+                        CustomAccessibilityAction(refreshLabel) {
+                            onRefresh()
+                            true
+                        },
+                    )
+                }
+            },
+            indicator = {
+                if (motion) {
+                    PullToRefreshDefaults.Indicator(
+                        state = pullState,
+                        isRefreshing = refreshing,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        containerColor = Palette.Surface,
+                        color = Palette.Accent,
+                    )
+                } else if (refreshing || pullState.distanceFraction > 0f) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        color = Palette.Surface,
+                        shape = RoundedCornerShape(10.dp),
+                    ) {
+                        Text(
+                            stringResource(if (refreshing) R.string.refreshing else R.string.refresh_hint),
+                            color = Palette.Accent,
+                            fontFamily = Mono,
+                            modifier = Modifier.padding(12.dp),
                         )
                     }
                 }
-                item { ListFooter(shown.size, snapshot.groups.size) }
+            },
+        ) {
+            if (shown.isEmpty()) {
+                NoMatch(filter, Modifier.fillMaxSize().verticalScroll(rememberScrollState()))
+            } else {
+                LazyColumn(Modifier.fillMaxSize(), state = rememberListStateKeptAtTop(shown)) {
+                    items(shown, key = { it.key }) { group ->
+                        Box(Modifier.animateItem()) {
+                            GroupRow(
+                                group = group,
+                                barFraction = (group.shareOfRam / largestShare).toFloat(),
+                                motion = motion,
+                                expanded = group.key in expanded,
+                                selection = selectionOf(group, selecting, group.key in selected),
+                                onToggleExpanded = { expanded = expanded.toggle(group.key) },
+                                onToggleSelected = { selected = selected.toggle(group.key) },
+                                onReclaim = { onReclaim(setOf(group.key)) },
+                                onForceStop = { confirmingForceStop = setOf(group.key) },
+                            )
+                        }
+                    }
+                    item { ListFooter(shown.size, snapshot.groups.size) }
+                }
             }
         }
         val forceStopping = snapshot.groups.filter { it.key in confirmingForceStop && it.canForceStop }
@@ -171,7 +225,7 @@ private fun SelectionBar(
             pluralStringResource(R.plurals.selection_summary, count, count, memText),
             fontFamily = Mono,
             fontSize = 13.sp,
-            color = Palette.Amber,
+            color = Palette.Accent,
         )
         TermButtonRow(Modifier.padding(top = 8.dp)) {
             TermButton(stringResource(R.string.reclaim_button), onClick = onReclaim)
@@ -206,8 +260,9 @@ private fun FilterPrompt(filter: String, onChange: (String) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(Palette.Surface, RoundedCornerShape(8.dp))
-            .padding(horizontal = 12.dp, vertical = 9.dp),
+            .background(Palette.Surface, RoundedCornerShape(10.dp))
+            .border(1.dp, Palette.Border, RoundedCornerShape(10.dp))
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("$", fontFamily = Mono, fontSize = 14.sp, color = Palette.Green)
@@ -218,7 +273,7 @@ private fun FilterPrompt(filter: String, onChange: (String) -> Unit) {
                     stringResource(R.string.filter_hint),
                     fontFamily = Mono,
                     fontSize = 14.sp,
-                    color = Palette.Dim.copy(alpha = 0.6f),
+                    color = Palette.Dim,
                 )
             }
             BasicTextField(
@@ -230,7 +285,7 @@ private fun FilterPrompt(filter: String, onChange: (String) -> Unit) {
                     fontSize = 14.sp,
                     color = Palette.Text,
                 ),
-                cursorBrush = SolidColor(Palette.Amber),
+                cursorBrush = SolidColor(Palette.Accent),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -278,7 +333,13 @@ private fun GroupRow(
             )
             .padding(vertical = 4.dp),
     ) {
-        Box(Modifier.fillMaxWidth().selectedOutline(selection == RowSelection.SELECTED)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(Palette.Surface, RoundedCornerShape(10.dp))
+                .border(1.dp, Palette.Border, RoundedCornerShape(10.dp))
+                .selectedOutline(selection == RowSelection.SELECTED),
+        ) {
             ShareOfRamBar(barFraction, hot, Modifier.matchParentSize())
             GroupSummary(group, hot, motion, expandable, expanded, selection)
         }
@@ -296,7 +357,7 @@ private fun GroupRow(
 }
 
 private fun Modifier.selectedOutline(selected: Boolean): Modifier = if (selected) {
-    border(1.dp, Palette.Amber.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+    border(2.dp, Palette.Accent, RoundedCornerShape(10.dp))
 } else {
     this
 }
@@ -314,7 +375,7 @@ private fun ShareOfRamBar(fraction: Float, hot: Boolean, modifier: Modifier) {
                 .fillMaxWidth(width)
                 .fillMaxHeight()
                 .background(
-                    (if (hot) Palette.Red else Palette.Amber).copy(alpha = 0.07f),
+                    if (hot) Palette.RedTint else Palette.AccentTint,
                     RoundedCornerShape(6.dp),
                 ),
         )
@@ -338,14 +399,21 @@ private fun GroupSummary(
     ) {
         SelectionMark(selection)
         Column(Modifier.width(92.dp), horizontalAlignment = Alignment.End) {
-            Text(group.memText, fontFamily = Mono, fontSize = 15.sp, color = Palette.Amber)
+            Text(
+                group.memText,
+                fontFamily = Mono,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Palette.Accent,
+            )
             ShareOfRamText(group.shareText, hot, motion)
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 group.label,
-                fontSize = 15.sp,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
                 color = if (group.isApp) Palette.Cyan else Palette.Green,
             )
             if (expandable) {
@@ -362,7 +430,7 @@ private fun SelectionMark(selection: RowSelection) {
         RowSelection.UNSELECTED -> "[ ]"
         RowSelection.OFF, RowSelection.UNAVAILABLE -> return
     }
-    Text(mark, fontFamily = Mono, fontSize = 14.sp, color = Palette.Amber, modifier = Modifier.padding(end = 8.dp))
+    Text(mark, fontFamily = Mono, fontSize = 14.sp, color = Palette.Accent, modifier = Modifier.padding(end = 8.dp))
 }
 
 @Composable
@@ -376,7 +444,7 @@ private fun MemberTree(members: List<UiMember>, owner: String) {
                 member.memText,
                 fontFamily = Mono,
                 fontSize = 12.sp,
-                color = Palette.Amber,
+                color = Palette.Accent,
                 modifier = Modifier.width(78.dp),
             )
             Spacer(Modifier.width(8.dp))
@@ -423,7 +491,8 @@ private fun ExpandChip(expanded: Boolean, count: Int) {
     Row(
         Modifier
             .padding(top = 5.dp)
-            .border(1.dp, Palette.Dim.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+            .background(Palette.Surface, RoundedCornerShape(20.dp))
+            .border(1.dp, Palette.Border, RoundedCornerShape(20.dp))
             .padding(horizontal = 9.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -431,14 +500,14 @@ private fun ExpandChip(expanded: Boolean, count: Int) {
             if (expanded) "▾" else "▸",
             fontFamily = Mono,
             fontSize = 11.sp,
-            color = Palette.Amber,
+            color = Palette.Accent,
         )
         Spacer(Modifier.width(6.dp))
         Text(
             pluralStringResource(R.plurals.process_count, count, count),
             fontFamily = Mono,
             fontSize = 11.sp,
-            color = Palette.Text.copy(alpha = 0.85f),
+            color = Palette.Text,
         )
     }
 }
@@ -449,7 +518,7 @@ private fun ShareOfRamText(text: String, hot: Boolean, motion: Boolean) {
         val transition = rememberInfiniteTransition(label = "hot")
         transition.animateFloat(
             initialValue = 1f,
-            targetValue = 0.45f,
+            targetValue = 0.9f,
             animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
             label = "hotpulse",
         ).value

@@ -43,6 +43,7 @@ data class UiMember(val name: String, val pid: Int, val memText: String)
 sealed interface LoadError {
     data object EmptyMeminfo : LoadError
     data object ShellDidNotStart : LoadError
+    data object ShellDisconnected : LoadError
     data class Failed(val detail: String) : LoadError
 }
 

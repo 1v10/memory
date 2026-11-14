@@ -12,16 +12,30 @@ fun optionalProperties(file: File) = Properties().apply {
 
 val releaseSigning = optionalProperties(rootProject.file("keystore.properties"))
 
+fun signingValue(environmentName: String, propertyName: String): String? =
+    providers.environmentVariable(environmentName).orNull ?: releaseSigning.getProperty(propertyName)
+
+val signingStoreFile = signingValue("MEMORY_KEYSTORE_PATH", "storeFile")
+val signingStorePassword = signingValue("MEMORY_KEYSTORE_PASSWORD", "storePassword")
+val signingKeyAlias = signingValue("MEMORY_KEY_ALIAS", "keyAlias")
+val signingKeyPassword = signingValue("MEMORY_KEY_PASSWORD", "keyPassword")
+val signingValues = listOf(signingStoreFile, signingStorePassword, signingKeyAlias, signingKeyPassword)
+val hasReleaseSigning = signingValues.all { !it.isNullOrBlank() }
+
+require(hasReleaseSigning || signingValues.all { it == null }) {
+    "Incomplete release signing configuration. See RELEASING.md."
+}
+
 android {
     namespace = "dev.collinsthomas.memhogs"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "dev.collinsthomas.memhogs"
+        applicationId = "dev.collinsthomas.memhogs.light"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 6
+        versionName = "1.0.0"
     }
 
     buildFeatures {
@@ -36,12 +50,12 @@ android {
     }
 
     signingConfigs {
-        if (releaseSigning.isNotEmpty()) {
+        if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(releaseSigning.getProperty("storeFile"))
-                storePassword = releaseSigning.getProperty("storePassword")
-                keyAlias = releaseSigning.getProperty("keyAlias")
-                keyPassword = releaseSigning.getProperty("keyPassword")
+                storeFile = file(requireNotNull(signingStoreFile))
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
             }
         }
     }
@@ -54,7 +68,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            if (releaseSigning.isNotEmpty()) {
+            if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }

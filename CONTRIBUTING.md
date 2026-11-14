@@ -60,7 +60,7 @@ strings are typed out line by line, so keep each `\n`-separated line under
 **Motion.** Gate every animation on the `motion` flag, which follows the
 system's "remove animations" setting.
 
-**Palette.** Colors carry meaning shared with the CLI: amber for memory,
+**Palette.** Colors carry meaning: blue for memory,
 cyan for installed apps, green for system daemons, red for anything past
 `HOT_GROUP_SHARE_OF_RAM` or `HOT_DEVICE_USED_FRACTION`. Use `Palette` tokens, never raw colors.
 

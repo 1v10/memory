@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.app.Application
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.DeadObjectException
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.collinsthomas.memhogs.mem.ActivityLruParser
@@ -45,23 +46,36 @@ class MemhogsViewModel(application: Application) :
 
     private var pendingReclaim: PendingReclaim? = null
     private var reclaimMessageJob: Job? = null
+    private var snapshotJob: Job? = null
+    private var foreground = false
+    private var reclaiming = false
+    private var refreshPending = true
 
     init {
         shizuku.start()
     }
 
     fun onResume(animationsEnabled: Boolean) {
+        foreground = true
         mutableState.update {
             it.copy(
                 motion = animationsEnabled,
                 shizukuInstalled = isInstalled(SHIZUKU_PACKAGE),
-                gauge = readGauge(),
+                gauge = it.gauge ?: readGauge(),
             )
         }
-        shizuku.evaluateAccess()
+        shizuku.setForeground(true)
+        loadSnapshot()
+    }
+
+    fun onPause() {
+        foreground = false
+        shizuku.setForeground(false)
     }
 
     fun refresh() {
+        if (reclaiming || snapshotJob?.isActive == true) return
+        refreshPending = true
         mutableState.update { it.copy(gauge = readGauge(), error = null) }
         shizuku.evaluateAccess()
         loadSnapshot()
@@ -84,16 +98,25 @@ class MemhogsViewModel(application: Application) :
         eligible: (UiGroup) -> Boolean,
         stop: IShellService.(String) -> Unit,
     ) {
+        if (reclaiming) return
         val shell = shizuku.shell ?: return
         val snapshot = state.value.snapshot ?: return
         val pending = PendingReclaim.of(snapshot, packageNames, eligible) ?: return
-        pendingReclaim = pending
+        reclaiming = true
         viewModelScope.launch {
-            reportingFailures {
-                withContext(Dispatchers.IO) { pending.packageNames.forEach { shell.stop(it) } }
-                delay(RECLAIM_SETTLE_MILLIS)
-                loadSnapshot()
+            var stopped = false
+            try {
+                snapshotJob?.join()
+                pendingReclaim = pending
+                reportingFailures {
+                    withContext(Dispatchers.IO) { pending.packageNames.forEach { shell.stop(it) } }
+                    delay(RECLAIM_SETTLE_MILLIS)
+                    stopped = true
+                }
+            } finally {
+                reclaiming = false
             }
+            if (stopped) refresh()
         }
     }
 
@@ -102,7 +125,10 @@ class MemhogsViewModel(application: Application) :
     }
 
     override fun onShellConnected() {
-        loadSnapshot()
+        viewModelScope.launch {
+            snapshotJob?.join()
+            loadSnapshot()
+        }
     }
 
     override fun onShellFailed(error: Throwable) {
@@ -118,12 +144,16 @@ class MemhogsViewModel(application: Application) :
     }
 
     private fun loadSnapshot() {
+        if (!refreshPending || !foreground || reclaiming || snapshotJob?.isActive == true) return
         val shell = shizuku.shell ?: return
-        if (state.value.refreshing) return
+        refreshPending = false
         mutableState.update { it.copy(refreshing = true, error = null) }
-        viewModelScope.launch {
-            reportingFailures { measure(shell) }
-            mutableState.update { it.copy(refreshing = false) }
+        snapshotJob = viewModelScope.launch {
+            try {
+                reportingFailures { measure(shell) }
+            } finally {
+                mutableState.update { it.copy(refreshing = false) }
+            }
         }
     }
 
@@ -171,7 +201,13 @@ class MemhogsViewModel(application: Application) :
 
     private fun showFailure(error: Throwable) {
         pendingReclaim = null
-        mutableState.update { it.copy(error = LoadError.Failed(error.message ?: error.toString())) }
+        if (error is DeadObjectException || error.cause is DeadObjectException) {
+            refreshPending = true
+            mutableState.update { it.copy(error = LoadError.ShellDisconnected) }
+            if (foreground) shizuku.reconnect()
+        } else {
+            mutableState.update { it.copy(error = LoadError.Failed(error.message ?: error.toString())) }
+        }
     }
 
     private fun readGauge(): Gauge {

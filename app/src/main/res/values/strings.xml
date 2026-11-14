@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name" translatable="false">memhogs</string>
+    <string name="app_name" translatable="false">memory</string>
 
-    <string name="header_used">%1$s of %2$s used</string>
+    <string name="header_used">%1$s of %2$s used (%3$s)</string>
     <plurals name="header_used_with_processes">
-        <item quantity="one">%1$s of %2$s used · %3$d process</item>
-        <item quantity="other">%1$s of %2$s used · %3$d processes</item>
+        <item quantity="one">%1$s of %2$s used (%3$s) · %4$d process</item>
+        <item quantity="other">%1$s of %2$s used (%3$s) · %4$d processes</item>
     </plurals>
-    <string name="live">live</string>
+    <string name="refresh_hint">pull to refresh</string>
+    <string name="refreshing">refreshing…</string>
     <string name="refresh">Refresh</string>
 
     <string name="filter_hint">filter by name</string>
@@ -50,13 +51,14 @@
     <string name="setup_get_shizuku">get shizuku · github</string>
     <string name="setup_check_again">check again</string>
 
-    <string name="permission_status">running · memhogs not authorized</string>
+    <string name="permission_status">running · memory not authorized</string>
     <string name="permission_explanation">one tap left. grant access and every\napp on this phone lines up by memory.</string>
     <string name="permission_grant">grant access</string>
 
     <string name="error_line">error: %1$s</string>
     <string name="error_empty_meminfo">dumpsys returned no per-process data</string>
     <string name="error_shell_did_not_start">shizuku did not start the shell</string>
-    <string name="error_shell_did_not_start_hint">shizuku is running, but the memhogs\nshell it launches never answered.\nsome systems, like hyperos 3, block\nit. restart shizuku, then retry.</string>
+    <string name="error_shell_did_not_start_hint">shizuku is running, but the memory\nshell it launches never answered.\nsome systems, like hyperos 3, block\nit. restart shizuku, then retry.</string>
+    <string name="error_shell_disconnected">Service connection lost. Reconnecting…</string>
     <string name="error_retry">retry</string>
 </resources>

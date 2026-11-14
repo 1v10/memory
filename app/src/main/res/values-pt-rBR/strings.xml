@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="header_used">%1$s de %2$s em uso</string>
+    <string name="header_used">%1$s de %2$s em uso (%3$s)</string>
     <plurals name="header_used_with_processes">
-        <item quantity="one">%1$s de %2$s em uso · %3$d processo</item>
-        <item quantity="many">%1$s de %2$s em uso · %3$d processos</item>
-        <item quantity="other">%1$s de %2$s em uso · %3$d processos</item>
+        <item quantity="one">%1$s de %2$s em uso (%3$s) · %4$d processo</item>
+        <item quantity="many">%1$s de %2$s em uso (%3$s) · %4$d processos</item>
+        <item quantity="other">%1$s de %2$s em uso (%3$s) · %4$d processos</item>
     </plurals>
-    <string name="live">ao vivo</string>
+    <string name="refresh_hint">puxe para atualizar</string>
+    <string name="refreshing">atualizando…</string>
     <string name="refresh">Atualizar</string>
 
     <string name="filter_hint">filtrar por nome</string>
@@ -53,13 +54,14 @@
     <string name="setup_get_shizuku">baixar shizuku · github</string>
     <string name="setup_check_again">verificar de novo</string>
 
-    <string name="permission_status">rodando · memhogs sem autorização</string>
+    <string name="permission_status">rodando · memory sem autorização</string>
     <string name="permission_explanation">falta um toque. conceda o acesso e todo\napp deste celular se alinha por memória.</string>
     <string name="permission_grant">conceder acesso</string>
 
     <string name="error_line">erro: %1$s</string>
     <string name="error_empty_meminfo">o dumpsys não retornou dados por processo</string>
     <string name="error_shell_did_not_start">o shizuku não iniciou o shell</string>
-    <string name="error_shell_did_not_start_hint">o shizuku está rodando, mas o shell do\nmemhogs nunca respondeu. alguns\nsistemas, como o hyperos 3, bloqueiam\nisso. reinicie o shizuku e tente de novo.</string>
+    <string name="error_shell_did_not_start_hint">o shizuku está rodando, mas o shell do\nmemory nunca respondeu. alguns\nsistemas, como o hyperos 3, bloqueiam\nisso. reinicie o shizuku e tente de novo.</string>
+    <string name="error_shell_disconnected">Conexão com o serviço perdida. Reconectando…</string>
     <string name="error_retry">tentar de novo</string>
 </resources>

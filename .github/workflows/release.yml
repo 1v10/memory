@@ -1,0 +1,177 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release
+        required: true
+        default: v1.0.0
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - name: Validate tag format
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected a version tag such as v1.0.0."
+            exit 1
+          fi
+      - name: Check out release tag
+        uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - name: Read and validate release version
+        id: version
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+
+          source = Path("app/build.gradle.kts").read_text(encoding="utf-8")
+          version = re.search(r'^\s*versionName = "([0-9]+\.[0-9]+\.[0-9]+)"\s*$', source, re.M).group(1)
+          code = re.search(r'^\s*versionCode = ([0-9]+)\s*$', source, re.M).group(1)
+          if os.environ["RELEASE_TAG"] != f"v{version}":
+              raise SystemExit("Release tag does not match app versionName")
+          notes = Path(f"fastlane/metadata/android/en-US/changelogs/{code}.txt")
+          if not notes.is_file() or not notes.read_text(encoding="utf-8").strip():
+              raise SystemExit("Release changelog is missing or empty")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"name={version}\ncode={code}\nnotes={notes.as_posix()}\n")
+          PY
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          printf 'y\n%.0s' {1..100} | "$sdkmanager" --licenses > /dev/null
+          "$sdkmanager" "platforms;android-37.0" "build-tools;37.0.0"
+      - name: Run release checks
+        run: ./gradlew ktlintCheck lintDebug testDebugUnitTest --console=plain
+      - name: Build signed release APK
+        env:
+          MEMORY_SIGNING: ${{ secrets.MEMORY_SIGNING }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import binascii
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import tempfile
+
+          raw = os.environ.get("MEMORY_SIGNING", "")
+          if not raw.strip():
+              raise SystemExit("Set repository secret MEMORY_SIGNING to the contents of MEMORY_SIGNING.json. See RELEASING.md.")
+          try:
+              signing = json.loads(raw)
+          except json.JSONDecodeError:
+              raise SystemExit("MEMORY_SIGNING must contain valid JSON from MEMORY_SIGNING.json.") from None
+          fields = ("keystoreBase64", "storePassword", "keyAlias", "keyPassword")
+          if not isinstance(signing, dict) or any(
+              not isinstance(signing.get(field), str) or not signing[field].strip() or "\0" in signing[field]
+              for field in fields
+          ):
+              raise SystemExit("MEMORY_SIGNING requires nonempty keystoreBase64, storePassword, keyAlias and keyPassword strings.")
+          try:
+              key_bytes = base64.b64decode(signing["keystoreBase64"], validate=True)
+          except (ValueError, binascii.Error):
+              raise SystemExit("MEMORY_SIGNING contains an invalid Base64 keystore.") from None
+          for field in fields:
+              masked = signing[field].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::add-mask::{masked}", flush=True)
+          with tempfile.TemporaryDirectory(prefix="memory-signing-", dir=os.environ["RUNNER_TEMP"]) as directory:
+              key_file = Path(directory) / "memory-release.jks"
+              key_file.write_bytes(key_bytes)
+              key_file.chmod(0o600)
+              build_env = os.environ.copy()
+              build_env.pop("MEMORY_SIGNING", None)
+              build_env.update(
+                  MEMORY_KEYSTORE_PATH=str(key_file),
+                  MEMORY_KEYSTORE_PASSWORD=signing["storePassword"],
+                  MEMORY_KEY_ALIAS=signing["keyAlias"],
+                  MEMORY_KEY_PASSWORD=signing["keyPassword"],
+              )
+              result = subprocess.run(["./gradlew", "--no-daemon", "assembleRelease", "--console=plain"], env=build_env)
+              if result.returncode:
+                  raise SystemExit(result.returncode)
+          PY
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk > "$RUNNER_TEMP/memory-signing-certificate.txt"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+
+          expected = Path("signing-certificate.sha256").read_text(encoding="ascii").strip().lower()
+          report = (Path(os.environ["RUNNER_TEMP"]) / "memory-signing-certificate.txt").read_text(encoding="utf-8")
+          actual = {value.lower() for value in re.findall(r"certificate SHA-256 digest: ([0-9a-fA-F]+)", report)}
+          if not re.fullmatch(r"[0-9a-f]{64}", expected) or actual != {expected}:
+              raise SystemExit("Signing certificate differs from the existing memory app")
+          print("APK signature verified; signing certificate matches the existing memory app.")
+          PY
+      - name: Prepare release assets
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.name }}
+          RELEASE_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = json.loads(Path("app/build/outputs/apk/release/output-metadata.json").read_text(encoding="utf-8"))
+          elements = metadata["elements"]
+          if len(elements) != 1:
+              raise SystemExit("Expected one universal release APK")
+          apk = elements[0]
+          if apk["versionName"] != os.environ["RELEASE_VERSION"] or apk["versionCode"] != int(os.environ["RELEASE_CODE"]):
+              raise SystemExit("Built APK version does not match release tag")
+          PY
+          mkdir -p build/release
+          cp app/build/outputs/apk/release/app-release.apk "build/release/memory-$RELEASE_VERSION.apk"
+          cd build/release
+          sha256sum "memory-$RELEASE_VERSION.apk" > SHA256SUMS
+      - name: Upload release build
+        uses: actions/upload-artifact@v7
+        with:
+          name: memory-${{ steps.version.outputs.name }}
+          path: build/release/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.name }}
+          RELEASE_NOTES: ${{ steps.version.outputs.notes }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            "build/release/memory-$RELEASE_VERSION.apk" \
+            build/release/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "memory $RELEASE_VERSION" \
+            --notes-file "$RELEASE_NOTES"

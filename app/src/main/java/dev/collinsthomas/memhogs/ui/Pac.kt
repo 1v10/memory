@@ -47,7 +47,7 @@ fun Pac(size: Dp, chomping: Boolean, modifier: Modifier = Modifier) {
     }
     Canvas(modifier.size(size)) {
         drawArc(
-            color = Palette.Amber,
+            color = Palette.Accent,
             startAngle = mouth / 2f,
             sweepAngle = 360f - mouth,
             useCenter = true,
@@ -107,7 +107,7 @@ fun RamGauge(usedFraction: Float, modifier: Modifier = Modifier, hotAt: Float = 
         val cellWidth = 7.dp.toPx()
         val cellCount = ((size.width + gap) / (cellWidth + gap)).toInt().coerceAtLeast(1)
         val filledCells = fill * cellCount
-        val fillColor = if (hot) Palette.Red else Palette.Amber
+        val fillColor = if (hot) Palette.Red else Palette.Accent
         for (cell in 0 until cellCount) {
             val color = when {
                 cell + 1 <= filledCells -> fillColor

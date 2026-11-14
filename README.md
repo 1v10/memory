@@ -1,4 +1,4 @@
-# memhogs for Android
+# memory for Android
 
 The Android companion to [memhogs](https://github.com/cicerothoma/memhogs):
 open it and see which apps are using your phone's memory, largest first,
@@ -40,12 +40,12 @@ never counts the same physical memory twice. This is the same fair-share
 metric the memhogs CLI uses on Linux, and the same one Android itself
 uses to decide which app to kill under pressure.
 
-- Amber numbers are memory, cyan names are installed apps, green names
+- Blue numbers are memory, cyan names are installed apps, green names
   are system daemons that do not resolve to an installed package.
 - An app using 15% or more of RAM gets its share flagged in red.
 - Tap a row to expand its member processes with their PIDs.
-- The filter field narrows the list by name, and the live toggle
-  refreshes every five seconds, like the CLI's `--watch`.
+- The filter field narrows the list by name. Data loads once on launch;
+  pull down at the top of the list to refresh it manually.
 
 ## Reclaiming memory
 
@@ -59,17 +59,14 @@ safety working as intended. System daemons never offer the button.
 
 ## Install
 
-Grab the APK from the
-[releases page](https://github.com/cicerothoma/memhogs-android/releases)
-and sideload it. The
-[memhogs website](https://cicerothoma.github.io/memhogs/#android) has a
-step-by-step walkthrough including the Shizuku setup. Store listings
-(F-Droid, Play) may come later; the releases page is the canonical
-source either way, and the repo carries ready-to-submit F-Droid
-metadata in `fdroid/` for when that day comes.
+Download `memory-1.0.0.apk` from this repository's **Releases** page once its
+Release workflow has completed. `SHA256SUMS` accompanies the signed APK.
+Debug builds are available in **Actions → Build → Artifacts → memory-debug**.
 
-Requires Android 8.0 or newer. The full experience requires the Shizuku
-service to be running.
+Requires Android 8.0 or newer and a running, authorized
+[Shizuku](https://shizuku.rikka.app/) service for per-app memory data.
+Release builds retain the existing memory signing key and can update the local
+preview directly. See [RELEASING.md](RELEASING.md) for signing and publishing setup.
 
 ## Building
 
@@ -85,6 +82,22 @@ for how the pieces fit.
 Kotlin and Jetpack Compose, with the Shizuku API as the only non-AndroidX
 dependency.
 
+## Automated builds and releases
+
+Pushes to `main`, pull requests and manual **Build** runs produce a debug APK
+and check reports. To publish **memory 1.0.0**, first configure the single
+`MEMORY_SIGNING` secret described in [RELEASING.md](RELEASING.md), then push the `v1.0.0` tag
+or manually run **Release** for that existing tag. The workflow publishes a
+signed, optimized APK and SHA-256 checksums after all checks pass.
+
 ## License
 
 MIT
+
+## Local customization
+
+The Android app is named `memory` and uses a light theme with blue memory
+accents. The header shows the device-wide usage percentage. Data loads once
+on launch, then stays unchanged until you pull down at the top of the list.
+Returning from the background does not refresh it, and there is no automatic
+refresh timer.

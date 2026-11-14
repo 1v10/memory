@@ -25,4 +25,16 @@ class FormatTest {
             Locale.setDefault(original)
         }
     }
+
+    @Test
+    fun deviceUsagePercentUsesTheRawMemoryTotals() {
+        assertEquals("54.5%", usagePercent(6L * 1024 * 1024 * 1024, 11L * 1024 * 1024 * 1024))
+        assertEquals("62.5%", usagePercent(5_000_000, 8_000_000))
+    }
+
+    @Test
+    fun deviceUsagePercentHandlesAnUnknownTotal() {
+        assertEquals("0.0%", usagePercent(100, 0))
+        assertEquals("0.0%", usagePercent(100, -1))
+    }
 }

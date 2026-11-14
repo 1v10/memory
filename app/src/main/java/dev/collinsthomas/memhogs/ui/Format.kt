@@ -18,3 +18,5 @@ fun humanReadableKb(kb: Long): String {
 }
 
 fun percent(fraction: Double): String = String.format(Locale.US, "%.1f%%", fraction * 100)
+
+fun usagePercent(used: Long, total: Long): String = percent(if (total > 0) used.toDouble() / total else 0.0)

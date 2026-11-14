@@ -16,6 +16,7 @@ const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
 private const val PERMISSION_REQUEST_CODE = 1
 private const val TAG = "ShizukuConnection"
 private const val SHELL_START_TIMEOUT_MILLIS = 10_000L
+private const val SHELL_RECONNECT_MILLIS = 1_000L
 
 class ShizukuConnection(private val listener: Listener) {
 
@@ -30,10 +31,15 @@ class ShizukuConnection(private val listener: Listener) {
         private set
 
     private var awaitingShell = false
+    private var bound = false
+    private var foreground = false
+    private var started = false
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val reconnectShell = Runnable { if (foreground && started) evaluateAccess() }
     private val shellStartTimedOut = Runnable {
         awaitingShell = false
         listener.onShellTimedOut()
+        scheduleReconnect()
     }
 
     private val serviceArgs = Shizuku.UserServiceArgs(
@@ -47,12 +53,21 @@ class ShizukuConnection(private val listener: Listener) {
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
             stopAwaitingShell()
+            if (!started) return
+            if (!binder.pingBinder()) {
+                shell = null
+                scheduleReconnect()
+                return
+            }
+            mainHandler.removeCallbacks(reconnectShell)
             shell = IShellService.Stub.asInterface(binder)
             listener.onShellConnected()
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
             shell = null
+            stopAwaitingShell()
+            scheduleReconnect()
         }
     }
 
@@ -60,22 +75,36 @@ class ShizukuConnection(private val listener: Listener) {
     private val binderDead = Shizuku.OnBinderDeadListener {
         stopAwaitingShell()
         shell = null
+        bound = false
         evaluateAccess()
     }
     private val permissionResult = Shizuku.OnRequestPermissionResultListener { _, _ -> evaluateAccess() }
 
     fun start() {
+        started = true
         Shizuku.addBinderReceivedListenerSticky(binderReceived)
         Shizuku.addBinderDeadListener(binderDead)
         Shizuku.addRequestPermissionResultListener(permissionResult)
     }
 
     fun stop() {
+        started = false
+        foreground = false
+        mainHandler.removeCallbacks(reconnectShell)
         stopAwaitingShell()
         Shizuku.removeBinderReceivedListener(binderReceived)
         Shizuku.removeBinderDeadListener(binderDead)
         Shizuku.removeRequestPermissionResultListener(permissionResult)
-        if (shell != null) unbindShell()
+        unbindShell()
+    }
+
+    fun setForeground(value: Boolean) {
+        foreground = value
+        if (value) {
+            evaluateAccess()
+        } else {
+            mainHandler.removeCallbacks(reconnectShell)
+        }
     }
 
     fun requestPermission() {
@@ -83,9 +112,23 @@ class ShizukuConnection(private val listener: Listener) {
     }
 
     fun evaluateAccess() {
-        val access = currentAccess()
+        if (!started) return
+        val access = try {
+            currentAccess()
+        } catch (e: RuntimeException) {
+            listener.onShellFailed(e)
+            ShizukuAccess.NOT_RUNNING
+        }
         listener.onAccessChanged(access)
-        if (access == ShizukuAccess.READY && shell == null && !awaitingShell) bindShell()
+        if (access != ShizukuAccess.READY || !foreground) return
+        if (shell?.asBinder()?.pingBinder() == false) unbindShell()
+        if (shell == null && !awaitingShell) bindShell()
+    }
+
+    fun reconnect() {
+        stopAwaitingShell()
+        unbindShell()
+        if (foreground) scheduleReconnect()
     }
 
     private fun currentAccess(): ShizukuAccess = when {
@@ -95,22 +138,34 @@ class ShizukuConnection(private val listener: Listener) {
     }
 
     private fun bindShell() {
+        if (bound) unbindShell()
+        awaitingShell = true
+        mainHandler.postDelayed(shellStartTimedOut, SHELL_START_TIMEOUT_MILLIS)
         try {
+            bound = true
             Shizuku.bindUserService(serviceArgs, serviceConnection)
-            awaitingShell = true
-            mainHandler.postDelayed(shellStartTimedOut, SHELL_START_TIMEOUT_MILLIS)
         } catch (e: RuntimeException) {
+            bound = false
+            stopAwaitingShell()
             listener.onShellFailed(e)
+            scheduleReconnect()
         }
     }
 
     private fun unbindShell() {
+        shell = null
+        if (!bound) return
+        bound = false
         try {
             Shizuku.unbindUserService(serviceArgs, serviceConnection, true)
         } catch (e: RuntimeException) {
             Log.w(TAG, "Shizuku was gone before the shell could be unbound", e)
         }
-        shell = null
+    }
+
+    private fun scheduleReconnect() {
+        mainHandler.removeCallbacks(reconnectShell)
+        if (foreground && started) mainHandler.postDelayed(reconnectShell, SHELL_RECONNECT_MILLIS)
     }
 
     private fun stopAwaitingShell() {

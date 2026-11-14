@@ -128,10 +128,10 @@ fun TermButtonRow(modifier: Modifier = Modifier, buttons: @Composable () -> Unit
 }
 
 @Composable
-fun TermButton(label: String, accent: Color = Palette.Amber, onClick: () -> Unit) {
+fun TermButton(label: String, accent: Color = Palette.Accent, onClick: () -> Unit) {
     Box(
         Modifier
-            .border(1.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+            .border(1.dp, accent.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
             .background(accent.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),

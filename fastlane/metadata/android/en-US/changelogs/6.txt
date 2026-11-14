@@ -1,0 +1,9 @@
+memory 1.0.0
+
+Light theme with blue accents and overall memory usage percentage.
+PSS memory ranking with grouped app processes, search and process details.
+Loads once on launch; pull down to refresh with no automatic polling.
+Background memory reclaim and confirmed force stop.
+Signed APK releases and automatic GitHub Actions builds.
+
+Requires Android 8.0+ and a running, authorized Shizuku service for per-app memory data.

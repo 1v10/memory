@@ -19,7 +19,7 @@ internal fun SetupScreen(
     onRetry: () -> Unit,
 ) {
     val lines = buildList {
-        add(TermLine("$ memhogs", Palette.Green))
+        add(TermLine("$ memory", Palette.Green))
         add(TermLine(stringResource(R.string.setup_error), Palette.Red, 260))
         add(BlankLine)
         addAll(termParagraph(stringResource(R.string.setup_explanation), Palette.Text, pauseAfter = 200))
@@ -44,7 +44,7 @@ internal fun SetupScreen(
 internal fun PermissionScreen(motion: Boolean, onRequestPermission: () -> Unit) {
     val lines = buildList {
         add(TermLine("$ shizuku status", Palette.Green))
-        add(TermLine(stringResource(R.string.permission_status), Palette.Amber, 200))
+        add(TermLine(stringResource(R.string.permission_status), Palette.Accent, 200))
         add(BlankLine)
         addAll(termParagraph(stringResource(R.string.permission_explanation), Palette.Text, pauseAfter = 150))
     }

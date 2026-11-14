@@ -92,6 +92,22 @@ purpose. A Play Store submission will need a policy declaration for it.
 Shizuku delivers its binder through `ShizukuProvider` in the manifest.
 There is no `INTERNET` permission, so memory data never leaves the device.
 
+## Refresh lifecycle
+
+The ViewModel requests one snapshot on launch. Once it has been read,
+returning from the background or rotating the screen keeps the same data.
+Pulling down at the top of the list requests another measurement; an empty
+filtered list is scrollable so the same gesture still works. A refresh action
+is also exposed to accessibility services. There is no polling timer.
+
+Refresh requests wait for the Shizuku shell if needed and share a single
+in-flight measurement. Reconnecting an idle shell does not trigger another
+sample. An explicit reclaim or force-stop operation still measures its result.
+
+The Shizuku connection checks the user-service binder before each refresh.
+A disconnected or dead shell is rebound while the page is visible. The last
+successful snapshot stays visible with an error message until new data arrives.
+
 ## Release and distribution
 
 Signing, versioning, and F-Droid metadata are covered in

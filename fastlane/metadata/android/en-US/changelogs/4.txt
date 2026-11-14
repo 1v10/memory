@@ -1,0 +1,3 @@
+Rename the app to memory and use a blue light theme.
+Show the overall memory usage percentage.
+Refresh automatically while the page is visible, pause in the background, and reconnect after shell service loss.

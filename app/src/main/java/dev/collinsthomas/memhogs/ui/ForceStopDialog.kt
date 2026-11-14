@@ -23,7 +23,7 @@ internal fun ForceStopDialog(labels: List<String>, onConfirm: () -> Unit, onDism
                     stringResource(R.string.force_stop_title, appsSubject(labels)),
                     fontFamily = Mono,
                     fontSize = 15.sp,
-                    color = Palette.Amber,
+                    color = Palette.Accent,
                 )
                 Text(
                     forceStopExplanation(labels.size),
